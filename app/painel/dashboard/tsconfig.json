@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "jsx": "preserve",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", "../components/dashboard/topbar.tsx", "../components/dashboard/accounts-card.tsx", "../components/dashboard/category-chart.tsx", "../components/dashboard/insights-card.tsx", "../components/dashboard/monthly-budget-card.tsx", "../components/dashboard/monthly-chart.tsx", "page.tsx", "../components/dashboard/summary-card.tsx", "../components/dashboard/transactions-card.tsx"],
+  "exclude": ["node_modules"]
+}
