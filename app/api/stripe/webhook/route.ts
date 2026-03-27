@@ -258,9 +258,24 @@ export async function POST(req: NextRequest) {
         const subscription = event.data.object as Stripe.Subscription
         const status = subscription.status
 
+        const customerId =
+          typeof subscription.customer === 'string'
+            ? subscription.customer
+            : subscription.customer?.id || null
+
+        const currentPeriodEnd =
+          subscription.items?.data?.[0]?.current_period_end
+            ? new Date(subscription.items.data[0].current_period_end * 1000).toISOString()
+            : null
+
+        const cancelAtPeriodEnd = subscription.cancel_at_period_end ?? false
+
         console.log('🔄 customer.subscription.updated:', {
           id: subscription.id,
           status,
+          customerId,
+          currentPeriodEnd,
+          cancelAtPeriodEnd,
           metadata: subscription.metadata,
         })
 
@@ -269,6 +284,10 @@ export async function POST(req: NextRequest) {
           .update({
             plan: status === 'active' || status === 'trialing' ? 'premium' : 'free',
             plan_status: status,
+            stripe_subscription_id: subscription.id,
+            stripe_customer_id: customerId,
+            current_period_end: currentPeriodEnd,
+            cancel_at_period_end: cancelAtPeriodEnd,
           })
           .eq('stripe_subscription_id', subscription.id)
           .select()
@@ -301,6 +320,7 @@ export async function POST(req: NextRequest) {
           .update({
             plan: 'free',
             plan_status: 'canceled',
+            cancel_at_period_end: false,
           })
           .eq('stripe_subscription_id', subscription.id)
           .select()
