@@ -1,5 +1,7 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
+
 type Props = {
   userEmail: string
   selectedMonth: string
@@ -7,6 +9,12 @@ type Props = {
 }
 
 export function Topbar({ userEmail, selectedMonth, onChangeMonth }: Props) {
+  const router = useRouter()
+
+  const handleNovoLancamento = () => {
+    router.push('/painel/lancamentos/novo')
+  }
+
   return (
     <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
       <div>
@@ -24,8 +32,11 @@ export function Topbar({ userEmail, selectedMonth, onChangeMonth }: Props) {
           className="rounded-2xl border border-gray-300 px-4 py-3 outline-none focus:border-black"
         />
 
-        <button className="rounded-2xl bg-black px-4 py-3 text-white hover:opacity-90">
-          Novo lançamento
+        <button
+          onClick={handleNovoLancamento}
+          className="rounded-2xl bg-black px-5 py-3 text-white font-medium hover:opacity-90 transition"
+        >
+          + Novo lançamento
         </button>
       </div>
     </div>
