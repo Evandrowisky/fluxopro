@@ -1,7 +1,7 @@
 'use client'
 
-import Link from 'next/link'
 import { useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '../../lib/supabase/client'
 
 export default function ResetSenhaPage() {
@@ -19,67 +19,63 @@ export default function ResetSenhaPage() {
     setSuccess('')
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/login`,
+      redirectTo: `${window.location.origin}/atualizar-senha`,
     })
 
     if (error) {
       setError(error.message)
-      setLoading(false)
-      return
+    } else {
+      setSuccess('Enviamos o link de redefinição para seu e-mail.')
     }
 
-    setSuccess('Enviamos o link de redefinição para seu e-mail.')
     setLoading(false)
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
-      <form
-        onSubmit={handleReset}
-        className="w-full max-w-md rounded-3xl bg-white p-8 shadow-sm"
-      >
-        <h1 className="text-3xl font-bold text-gray-900">Reset de senha</h1>
-        <p className="mt-2 text-sm text-gray-500">
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+      <div className="w-full max-w-2xl rounded-[32px] bg-white p-10 shadow-sm">
+        <h1 className="text-5xl font-bold text-gray-900">Reset de senha</h1>
+        <p className="mt-4 text-3xl text-gray-500">
           Informe seu e-mail para receber o link de redefinição
         </p>
 
-        {error ? (
-          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            {error}
-          </div>
-        ) : null}
-
-        {success ? (
-          <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+        {success && (
+          <div className="mt-8 rounded-3xl border border-green-300 bg-green-50 px-6 py-5 text-3xl text-green-700">
             {success}
           </div>
-        ) : null}
+        )}
 
-        <div className="mt-6">
+        {error && (
+          <div className="mt-8 rounded-3xl border border-red-300 bg-red-50 px-6 py-5 text-3xl text-red-700">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleReset} className="mt-8 space-y-8">
           <input
             type="email"
             placeholder="Seu e-mail"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-2xl border border-gray-300 px-4 py-3 outline-none focus:border-black"
             required
+            className="w-full rounded-3xl border border-gray-300 bg-slate-100 px-6 py-5 text-4xl outline-none focus:border-black"
           />
-        </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="mt-6 w-full rounded-2xl bg-black px-4 py-3 font-medium text-white hover:opacity-90 disabled:opacity-60"
-        >
-          {loading ? 'Enviando...' : 'Enviar link'}
-        </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-3xl bg-black px-6 py-5 text-4xl text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? 'Enviando...' : 'Enviar link'}
+          </button>
+        </form>
 
-        <div className="mt-6 text-sm text-gray-600">
-          <Link href="/login" className="hover:underline">
+        <div className="mt-8">
+          <Link href="/login" className="text-2xl text-gray-600 hover:text-black">
             Voltar para login
           </Link>
         </div>
-      </form>
+      </div>
     </div>
   )
 }
