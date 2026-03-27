@@ -1,5 +1,6 @@
 import './globals.css'
-import { WhatsappSupport } from '../components/WhatsappSupport'
+import { WhatsappSupport } from './painel/components/WhatsappSupport'
+
 
 export default function RootLayout({
   children,
