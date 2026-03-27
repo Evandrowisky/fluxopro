@@ -6,6 +6,17 @@ import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error('Variáveis do Supabase não configuradas.')
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey)
+}
+
 export async function GET() {
   return NextResponse.json({
     ok: true,
@@ -23,25 +34,35 @@ export async function POST(req: NextRequest) {
     return new NextResponse('Missing stripe-signature', { status: 400 })
   }
 
+  if (!process.env.STRIPE_WEBHOOK_SECRET) {
+    console.error('❌ STRIPE_WEBHOOK_SECRET não configurada')
+    return new NextResponse('Webhook secret não configurada', { status: 500 })
+  }
+
   let event: Stripe.Event
 
   try {
     event = stripe.webhooks.constructEvent(
       body,
       signature,
-      process.env.STRIPE_WEBHOOK_SECRET!
+      process.env.STRIPE_WEBHOOK_SECRET
     )
   } catch (err: any) {
     console.error('❌ Erro assinatura webhook:', err.message)
-    return new NextResponse('Webhook signature verification failed', { status: 400 })
+    return new NextResponse('Webhook signature verification failed', {
+      status: 400,
+    })
   }
 
   console.log('🔔 Evento Stripe recebido:', event.type)
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  let supabase
+  try {
+    supabase = getSupabaseAdmin()
+  } catch (err: any) {
+    console.error('❌ Erro ao criar cliente Supabase:', err.message)
+    return new NextResponse(err.message, { status: 500 })
+  }
 
   try {
     switch (event.type) {
@@ -63,12 +84,13 @@ export async function POST(req: NextRequest) {
             ? session.subscription
             : session.subscription?.id || null
 
-        console.log('📦 Checkout concluído:', {
+        console.log('📦 checkout.session.completed:', {
           sessionId: session.id,
           paymentStatus: session.payment_status,
           userId,
           customerId,
           subscriptionId,
+          metadata: session.metadata,
         })
 
         if (session.payment_status !== 'paid') {
@@ -81,7 +103,7 @@ export async function POST(req: NextRequest) {
           break
         }
 
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('profiles')
           .update({
             plan: 'premium',
@@ -90,10 +112,21 @@ export async function POST(req: NextRequest) {
             stripe_subscription_id: subscriptionId,
           })
           .eq('id', userId)
+          .select()
+
+        console.log('🧾 Resultado update checkout:', {
+          userId,
+          customerId,
+          subscriptionId,
+          data,
+          error,
+        })
 
         if (error) {
-          console.error('❌ Erro Supabase ao atualizar via checkout:', error.message)
-          return new NextResponse('Erro ao atualizar profile', { status: 500 })
+          console.error('❌ Erro Supabase ao atualizar via checkout:', error)
+          return new NextResponse(`Erro ao atualizar profile: ${error.message}`, {
+            status: 500,
+          })
         }
 
         console.log(`✅ Perfil ${userId} atualizado para Premium via checkout`)
@@ -102,11 +135,6 @@ export async function POST(req: NextRequest) {
 
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object as Stripe.Invoice
-
-        const userId =
-          invoice.parent?.subscription_details?.metadata?.user_id ||
-          invoice.lines?.data?.[0]?.parent?.subscription_item_details?.subscription ||
-          null
 
         const customerId =
           typeof invoice.customer === 'string'
@@ -121,61 +149,83 @@ export async function POST(req: NextRequest) {
           invoice.parent.subscription_details?.subscription
         ) {
           const sub = invoice.parent.subscription_details.subscription
-
-          subscriptionId =
-            typeof sub === 'string'
-              ? sub
-              : sub?.id || null
+          subscriptionId = typeof sub === 'string' ? sub : sub?.id || null
         }
 
-        console.log('💰 Invoice paga:', {
+        const invoiceUserId =
+          invoice.parent &&
+          'subscription_details' in invoice.parent
+            ? invoice.parent.subscription_details?.metadata?.user_id || null
+            : null
+
+        console.log('💰 invoice.payment_succeeded:', {
           invoiceId: invoice.id,
-          userId,
+          invoiceUserId,
           customerId,
           subscriptionId,
+          subscriptionMetadata:
+            invoice.parent &&
+            'subscription_details' in invoice.parent
+              ? invoice.parent.subscription_details?.metadata
+              : null,
         })
 
-        if (!userId) {
-          console.warn('⚠️ user_id não encontrado no invoice.payment_succeeded')
-          break
+        // 1º tenta atualizar por subscription_id
+        if (subscriptionId) {
+          const { data, error } = await supabase
+            .from('profiles')
+            .update({
+              plan: 'premium',
+              plan_status: 'active',
+              stripe_customer_id: customerId,
+              stripe_subscription_id: subscriptionId,
+            })
+            .eq('stripe_subscription_id', subscriptionId)
+            .select()
+
+          console.log('🧾 Resultado update invoice por subscription_id:', {
+            subscriptionId,
+            data,
+            error,
+          })
+
+          if (!error && data && data.length > 0) {
+            console.log('✅ Perfil atualizado via invoice usando subscription_id')
+            break
+          }
         }
 
-        const { error } = await supabase
-          .from('profiles')
-          .update({
-            plan: 'premium',
-            plan_status: 'active',
-            stripe_customer_id: customerId,
-            stripe_subscription_id: subscriptionId,
+        // 2º fallback: se o metadata da subscription tiver user_id, atualiza por id do usuário
+        if (invoiceUserId) {
+          const { data, error } = await supabase
+            .from('profiles')
+            .update({
+              plan: 'premium',
+              plan_status: 'active',
+              stripe_customer_id: customerId,
+              stripe_subscription_id: subscriptionId,
+            })
+            .eq('id', invoiceUserId)
+            .select()
+
+          console.log('🧾 Resultado update invoice por user_id:', {
+            invoiceUserId,
+            data,
+            error,
           })
-          .eq('id', userId)
 
-        if (error) {
-          console.error('❌ Erro Supabase ao atualizar via invoice:', error.message)
-          return new NextResponse('Erro ao atualizar profile', { status: 500 })
-        }
+          if (error) {
+            console.error('❌ Erro Supabase ao atualizar via invoice fallback:', error)
+            return new NextResponse(`Erro ao atualizar profile: ${error.message}`, {
+              status: 500,
+            })
+          }
 
-        console.log(`✅ Perfil ${userId} atualizado para Premium via invoice`)
-        break
-      }
-
-      case 'customer.subscription.deleted': {
-        const subscription = event.data.object as Stripe.Subscription
-
-        console.log('❌ Assinatura deletada:', subscription.id)
-
-        const { error } = await supabase
-          .from('profiles')
-          .update({
-            plan: 'free',
-            plan_status: 'canceled',
-          })
-          .eq('stripe_subscription_id', subscription.id)
-
-        if (error) {
-          console.error('❌ Erro ao cancelar profile:', error.message)
+          console.log('✅ Perfil atualizado via invoice usando user_id')
         } else {
-          console.log('✅ Perfil rebaixado para free')
+          console.warn(
+            '⚠️ invoice.payment_succeeded sem registro correspondente ainda. Ignorando sem quebrar.'
+          )
         }
 
         break
@@ -185,20 +235,64 @@ export async function POST(req: NextRequest) {
         const subscription = event.data.object as Stripe.Subscription
         const status = subscription.status
 
-        console.log('🔄 Assinatura atualizada:', subscription.id, status)
+        console.log('🔄 customer.subscription.updated:', {
+          id: subscription.id,
+          status,
+          metadata: subscription.metadata,
+        })
 
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('profiles')
           .update({
             plan: status === 'active' ? 'premium' : 'free',
             plan_status: status,
           })
           .eq('stripe_subscription_id', subscription.id)
+          .select()
+
+        console.log('🧾 Resultado update subscription.updated:', {
+          subscriptionId: subscription.id,
+          data,
+          error,
+        })
 
         if (error) {
-          console.error('❌ Erro ao atualizar subscription:', error.message)
-        } else {
-          console.log('✅ Status da assinatura atualizado com sucesso')
+          console.error('❌ Erro ao atualizar subscription:', error)
+          return new NextResponse(`Erro ao atualizar profile: ${error.message}`, {
+            status: 500,
+          })
+        }
+
+        break
+      }
+
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object as Stripe.Subscription
+
+        console.log('❌ customer.subscription.deleted:', {
+          id: subscription.id,
+        })
+
+        const { data, error } = await supabase
+          .from('profiles')
+          .update({
+            plan: 'free',
+            plan_status: 'canceled',
+          })
+          .eq('stripe_subscription_id', subscription.id)
+          .select()
+
+        console.log('🧾 Resultado update subscription.deleted:', {
+          subscriptionId: subscription.id,
+          data,
+          error,
+        })
+
+        if (error) {
+          console.error('❌ Erro ao cancelar profile:', error)
+          return new NextResponse(`Erro ao atualizar profile: ${error.message}`, {
+            status: 500,
+          })
         }
 
         break

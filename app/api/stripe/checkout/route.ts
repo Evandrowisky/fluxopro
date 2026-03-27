@@ -5,9 +5,16 @@ export async function POST(req: NextRequest) {
   try {
     const { priceType, userId, email } = await req.json()
 
+    if (!userId || !email) {
+      return NextResponse.json(
+        { error: 'userId e email são obrigatórios.' },
+        { status: 400 }
+      )
+    }
+
     if (!process.env.STRIPE_SECRET_KEY) {
       return NextResponse.json(
-        { error: 'STRIPE_SECRET_KEY não configurada no .env.local' },
+        { error: 'STRIPE_SECRET_KEY não configurada na Vercel.' },
         { status: 500 }
       )
     }
@@ -22,8 +29,8 @@ export async function POST(req: NextRequest) {
         {
           error:
             priceType === 'yearly'
-              ? 'STRIPE_PRICE_YEARLY não configurado no .env.local'
-              : 'STRIPE_PRICE_MONTHLY não configurado no .env.local',
+              ? 'STRIPE_PRICE_YEARLY não configurado na Vercel.'
+              : 'STRIPE_PRICE_MONTHLY não configurado na Vercel.',
         },
         { status: 500 }
       )
@@ -31,10 +38,12 @@ export async function POST(req: NextRequest) {
 
     if (!process.env.NEXT_PUBLIC_APP_URL) {
       return NextResponse.json(
-        { error: 'NEXT_PUBLIC_APP_URL não configurado no .env.local' },
+        { error: 'NEXT_PUBLIC_APP_URL não configurado na Vercel.' },
         { status: 500 }
       )
     }
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
@@ -45,17 +54,30 @@ export async function POST(req: NextRequest) {
           quantity: 1,
         },
       ],
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/painel/premium?success=1`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/painel/premium?canceled=1`,
+      success_url: `${baseUrl}/painel/premium?success=1`,
+      cancel_url: `${baseUrl}/painel/premium?canceled=1`,
+
+      // metadata da própria sessão
       metadata: {
         user_id: userId,
-        price_type: priceType,
+        price_type: priceType ?? 'monthly',
       },
+
+      // metadata da assinatura
+      subscription_data: {
+        metadata: {
+          user_id: userId,
+          price_type: priceType ?? 'monthly',
+        },
+      },
+
+      // ajuda como fallback
+      client_reference_id: userId,
     })
 
     return NextResponse.json({ url: session.url })
   } catch (error: any) {
-    console.error('Erro checkout Stripe:', error)
+    console.error('❌ Erro checkout Stripe:', error)
 
     return NextResponse.json(
       { error: error?.message || 'Erro ao criar sessão de pagamento.' },
