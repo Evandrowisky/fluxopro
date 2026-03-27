@@ -1,9 +1,5 @@
 import './globals.css'
-
-export const metadata = {
-  title: 'FluxoPro',
-  description: 'Seu financeiro premium',
-}
+import { WhatsappSupport } from '../components/WhatsappSupport'
 
 export default function RootLayout({
   children,
@@ -12,7 +8,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR">
-      <body>{children}</body>
+      <body>
+        {children}
+        <WhatsappSupport
+          phone="5512997383529"
+          message="Olá! Preciso de ajuda com o FluxoPro."
+        />
+      </body>
     </html>
   )
 }
