@@ -12,7 +12,7 @@ export function Topbar({ userEmail, selectedMonth, onChangeMonth }: Props) {
   const router = useRouter()
 
   const handleNovoLancamento = () => {
-    router.push('/painel/lancamentos/novo')
+    router.push('/painel/lancamentos')
   }
 
   return (
