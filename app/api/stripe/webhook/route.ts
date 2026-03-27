@@ -163,14 +163,8 @@ export async function POST(req: NextRequest) {
           invoiceUserId,
           customerId,
           subscriptionId,
-          subscriptionMetadata:
-            invoice.parent &&
-            'subscription_details' in invoice.parent
-              ? invoice.parent.subscription_details?.metadata
-              : null,
         })
 
-        // 1º tenta atualizar por subscription_id
         if (subscriptionId) {
           const { data, error } = await supabase
             .from('profiles')
@@ -195,7 +189,6 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // 2º fallback: se o metadata da subscription tiver user_id, atualiza por id do usuário
         if (invoiceUserId) {
           const { data, error } = await supabase
             .from('profiles')
@@ -231,6 +224,36 @@ export async function POST(req: NextRequest) {
         break
       }
 
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as Stripe.Invoice
+
+        let subscriptionId: string | null = null
+
+        if (
+          invoice.parent &&
+          'subscription_details' in invoice.parent &&
+          invoice.parent.subscription_details?.subscription
+        ) {
+          const sub = invoice.parent.subscription_details.subscription
+          subscriptionId = typeof sub === 'string' ? sub : sub?.id || null
+        }
+
+        if (subscriptionId) {
+          const { error } = await supabase
+            .from('profiles')
+            .update({
+              plan_status: 'past_due',
+            })
+            .eq('stripe_subscription_id', subscriptionId)
+
+          if (error) {
+            console.error('❌ Erro ao marcar pagamento falho:', error.message)
+          }
+        }
+
+        break
+      }
+
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription
         const status = subscription.status
@@ -244,7 +267,7 @@ export async function POST(req: NextRequest) {
         const { data, error } = await supabase
           .from('profiles')
           .update({
-            plan: status === 'active' ? 'premium' : 'free',
+            plan: status === 'active' || status === 'trialing' ? 'premium' : 'free',
             plan_status: status,
           })
           .eq('stripe_subscription_id', subscription.id)
