@@ -25,6 +25,8 @@ export default function PremiumPage() {
   const [portalLoading, setPortalLoading] = useState(false)
   const [plan, setPlan] = useState<Plan>('free')
   const [planStatus, setPlanStatus] = useState<PlanStatus>(null)
+  const [currentPeriodEnd, setCurrentPeriodEnd] = useState<string | null>(null)
+  const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false)
   const [error, setError] = useState('')
 
   async function loadProfile() {
@@ -44,7 +46,7 @@ export default function PremiumPage() {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('plan, plan_status')
+      .select('plan, plan_status, current_period_end, cancel_at_period_end')
       .eq('id', user.id)
       .single()
 
@@ -56,6 +58,8 @@ export default function PremiumPage() {
 
     setPlan((data?.plan as Plan) ?? 'free')
     setPlanStatus((data?.plan_status as PlanStatus) ?? null)
+    setCurrentPeriodEnd(data?.current_period_end ?? null)
+    setCancelAtPeriodEnd(Boolean(data?.cancel_at_period_end))
     setLoading(false)
   }
 
@@ -166,6 +170,18 @@ export default function PremiumPage() {
     }
   }
 
+  function formatDate(date: string | null) {
+    if (!date) return null
+
+    return new Intl.DateTimeFormat('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }).format(new Date(date))
+  }
+
+  const formattedEndDate = formatDate(currentPeriodEnd)
+
   return (
     <div>
       <div className="mb-8">
@@ -213,6 +229,16 @@ export default function PremiumPage() {
                   {getStatusLabel(planStatus)}
                 </strong>
               </div>
+
+              {plan === 'premium' && formattedEndDate ? (
+                <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                  <p className="text-sm text-blue-700">
+                    {cancelAtPeriodEnd
+                      ? `Seu cancelamento está agendado. Você continuará premium até ${formattedEndDate}.`
+                      : `Seu plano premium está garantido até ${formattedEndDate}.`}
+                  </p>
+                </div>
+              ) : null}
             </div>
           </section>
 
