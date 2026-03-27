@@ -231,12 +231,20 @@ export default function PremiumPage() {
               </div>
 
               {plan === 'premium' && formattedEndDate ? (
-                <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
-                  <p className="text-sm text-blue-700">
-                    {cancelAtPeriodEnd
-                      ? `Seu cancelamento está agendado. Você continuará premium até ${formattedEndDate}.`
-                      : `Seu plano premium está garantido até ${formattedEndDate}.`}
-                  </p>
+                <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-blue-700">
+                  {cancelAtPeriodEnd ? (
+                    <>
+                      Seu cancelamento está agendado.
+                      <br />
+                      Você continuará premium até{' '}
+                      <strong>{formattedEndDate}</strong>.
+                    </>
+                  ) : (
+                    <>
+                      Seu plano premium está ativo até{' '}
+                      <strong>{formattedEndDate}</strong>.
+                    </>
+                  )}
                 </div>
               ) : null}
             </div>
@@ -285,7 +293,23 @@ export default function PremiumPage() {
             ) : (
               <div className="mt-6 space-y-4">
                 <div className="rounded-2xl border border-green-200 bg-green-50 p-4 text-green-700">
-                  Seu plano premium está ativo.
+                  {currentPeriodEnd ? (
+                    cancelAtPeriodEnd ? (
+                      <>
+                        Seu cancelamento está agendado.
+                        <br />
+                        Você continuará premium até{' '}
+                        <strong>{formattedEndDate}</strong>.
+                      </>
+                    ) : (
+                      <>
+                        Seu plano premium está ativo até{' '}
+                        <strong>{formattedEndDate}</strong>.
+                      </>
+                    )
+                  ) : (
+                    'Seu plano premium está ativo.'
+                  )}
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
