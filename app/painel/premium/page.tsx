@@ -4,12 +4,27 @@ import { useEffect, useState } from 'react'
 import { createClient } from '../../../lib/supabase/client'
 import { PlanBadge } from '../components/plan-badge'
 
+type Plan = 'free' | 'premium'
+
+type PlanStatus =
+  | 'inactive'
+  | 'active'
+  | 'trialing'
+  | 'past_due'
+  | 'unpaid'
+  | 'canceled'
+  | 'incomplete'
+  | 'incomplete_expired'
+  | null
+
 export default function PremiumPage() {
   const supabase = createClient()
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [plan, setPlan] = useState<'free' | 'premium'>('free')
+  const [portalLoading, setPortalLoading] = useState(false)
+  const [plan, setPlan] = useState<Plan>('free')
+  const [planStatus, setPlanStatus] = useState<PlanStatus>(null)
   const [error, setError] = useState('')
 
   async function loadProfile() {
@@ -29,7 +44,7 @@ export default function PremiumPage() {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('plan')
+      .select('plan, plan_status')
       .eq('id', user.id)
       .single()
 
@@ -39,7 +54,8 @@ export default function PremiumPage() {
       return
     }
 
-    setPlan((data?.plan as 'free' | 'premium') ?? 'free')
+    setPlan((data?.plan as Plan) ?? 'free')
+    setPlanStatus((data?.plan_status as PlanStatus) ?? null)
     setLoading(false)
   }
 
@@ -88,6 +104,68 @@ export default function PremiumPage() {
     }
   }
 
+  async function handleManageSubscription() {
+    setPortalLoading(true)
+    setError('')
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      setError('Usuário não encontrado.')
+      setPortalLoading(false)
+      return
+    }
+
+    try {
+      const response = await fetch('/api/stripe/portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.url) {
+        setError(data.error || 'Erro ao abrir portal da assinatura.')
+        setPortalLoading(false)
+        return
+      }
+
+      window.location.href = data.url
+    } catch (err: any) {
+      setError(err?.message || 'Erro ao abrir portal da assinatura.')
+      setPortalLoading(false)
+    }
+  }
+
+  function getStatusLabel(status: PlanStatus) {
+    switch (status) {
+      case 'active':
+        return 'Ativa'
+      case 'trialing':
+        return 'Em teste'
+      case 'past_due':
+        return 'Pagamento pendente'
+      case 'unpaid':
+        return 'Não paga'
+      case 'canceled':
+        return 'Cancelada'
+      case 'incomplete':
+        return 'Incompleta'
+      case 'incomplete_expired':
+        return 'Expirada'
+      case 'inactive':
+        return 'Inativa'
+      default:
+        return 'Não informado'
+    }
+  }
+
   return (
     <div>
       <div className="mb-8">
@@ -121,11 +199,20 @@ export default function PremiumPage() {
               <PlanBadge plan={plan} />
             </div>
 
-            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
-              <p className="text-sm text-gray-500">Plano ativo</p>
-              <strong className="text-2xl text-gray-900">
-                {plan === 'premium' ? 'Premium' : 'Free'}
-              </strong>
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                <p className="text-sm text-gray-500">Plano ativo</p>
+                <strong className="text-2xl text-gray-900">
+                  {plan === 'premium' ? 'Premium' : 'Free'}
+                </strong>
+              </div>
+
+              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                <p className="text-sm text-gray-500">Status da assinatura</p>
+                <strong className="text-lg text-gray-900">
+                  {getStatusLabel(planStatus)}
+                </strong>
+              </div>
             </div>
           </section>
 
@@ -170,8 +257,34 @@ export default function PremiumPage() {
                 </button>
               </div>
             ) : (
-              <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 text-green-700">
-                Seu plano premium está ativo.
+              <div className="mt-6 space-y-4">
+                <div className="rounded-2xl border border-green-200 bg-green-50 p-4 text-green-700">
+                  Seu plano premium está ativo.
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <button
+                    onClick={handleManageSubscription}
+                    disabled={portalLoading}
+                    className="rounded-2xl bg-black px-4 py-3 font-medium text-white hover:opacity-90 disabled:opacity-60"
+                  >
+                    {portalLoading ? 'Abrindo...' : 'Gerenciar assinatura'}
+                  </button>
+
+                  <button
+                    onClick={handleManageSubscription}
+                    disabled={portalLoading}
+                    className="rounded-2xl border border-gray-300 px-4 py-3 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                  >
+                    {portalLoading ? 'Abrindo...' : 'Trocar para anual / cartão'}
+                  </button>
+                </div>
+
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+                  No portal da assinatura o cliente pode trocar o cartão,
+                  alterar o plano, cancelar no fim do ciclo atual e consultar
+                  cobranças.
+                </div>
               </div>
             )}
           </section>
